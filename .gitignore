@@ -1,0 +1,8 @@
+.vscode
+data/btc/*
+data/eth/*
+*.DS_Store
+/data/*.zip
+/data/**/*.zip
+/data/*.csv
+/data/**/*.csv
