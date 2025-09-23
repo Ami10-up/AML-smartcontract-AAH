@@ -13,16 +13,60 @@ const rpcEndpoint = process.env.RPC_URL!;   // ws://localhost:26657
 const oraclePrivKey = process.env.ORACLE_PRIVKEY!;
 
 // ---------------- Risk Score ----------------
-function calculateRiskScore(txs: any[]): number {
-  return Math.min(txs.length, 10); // dummy logic
+async function calculateRiskScore(txs: any[]): Promise<number> {
+  try {
+    // Call Python server
+    const response = await axios.post('http://localhost:8000/getriskscore', {
+      transactions: txs
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    // Extract risk score from response
+    const riskScore = response.data.risk_score;  // Changed from data to data.risk_score
+    if (typeof riskScore !== 'number') {
+      console.error('Invalid risk score received:', riskScore);
+      return 0;
+    }
+    return riskScore;
+  } catch (err) {
+    console.error('Error calculating risk score from Python server:', err);
+    return 0; // Default risk score on error
+  }
 }
+
 
 // ---------------- Transactions ----------------
 async function fetchTxs(address: string, field: "sender" | "recipient") {
   const url = `${restEndpoint}/cosmos/tx/v1beta1/txs?query=transfer.${field}='${address}'`;
   try {
     const resp = await axios.get(url);
-    return resp.data.tx_responses || [];
+    const oracleClient = await getClient();
+    const sender = address;
+    // Extract recipient and amount for all txs, and get recipient risk score
+    const txList = await Promise.all(
+      (resp.data.txs || []).map(async (tx: any) => {
+        // Defensive: handle both msg.send and funds
+        const msg = tx.body?.messages?.[0]?.msg?.send || {};
+        const recipient = msg.recipient || null;
+        const amount = tx.body?.messages?.[0]?.funds?.[0]?.amount || null;
+        // Get recipient risk score if recipient exists
+        let recipientRiskScore = null;
+        if (recipient) {
+          try {
+            // Assuming getRiskScore is an async function on oracleClient
+            recipientRiskScore = (await oracleClient.getRiskScore({ address: recipient.toString() })).risk_score;
+          } catch (e) {
+            console.error(`Error getting risk score for recipient ${recipient}:`, e);
+          }
+        }
+        return { sender, recipient, amount, recipientRiskScore };
+      })
+    );
+    console.log(txList);
+    return txList;
   } catch (err) {
     console.error(`Error fetching ${field} txs for ${address}:`, err);
     return [];
@@ -98,7 +142,7 @@ export async function processAddresses(addresses: string[]) {
       });
     });
 
-    const riskScore = calculateRiskScore(txs);
+    const riskScore = await calculateRiskScore(txs);
     await updateRiskScore(addr, riskScore, oracleClient);
   }
 
