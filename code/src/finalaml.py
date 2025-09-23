@@ -5,10 +5,14 @@ from pydantic import BaseModel
 import uvicorn
 
 # configure Gemini
-genai.configure(api_key="AIzaSyBRycluanWR13XpAuhl5nhV6DIlXz-AGuY")
+genai.configure(api_key="Add Gemini API key here")
 model = genai.GenerativeModel("gemini-2.5-flash")  # or gemini-1.5-pro
 
 def get_risk_score(transactions):
+    """
+    transactions: list of dicts like
+    [{"amount": 250, "merchant": "Amazon", "country": "IN", "timestamp": "2025-09-22T12:00:00"}]
+    """
     # prepare prompt
     tx_str = "\n".join([str(tx) for tx in transactions[-10:]])  # last 10 txs
     prompt = f"""
